@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+  <title>Paintball Marksman Arcade</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css" />
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Fredoka+One&family=Outfit:wght@400;600;800;900&display=swap');
+
+    * {
+      box-sizing: border-box;
+      user-select: none;
+      -webkit-user-select: none;
+    }
+    body {
+      margin: 0;
+      padding: 0;
+      background: radial-gradient(circle at 50% 20%, #1e1b4b 0%, #0f172a 60%, #020617 100%);
+      font-family: 'Outfit', sans-serif;
+      overflow: hidden;
+      color: #fff;
+    }
+    .font-game {
+      font-family: 'Fredoka One', cursive;
+    }
+    .weapon-card {
+      transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    }
+    .weapon-card.active {
+      transform: translateY(-4px) scale(1.03);
+      box-shadow: 0 0 20px rgba(56, 189, 248, 0.6), inset 0 0 10px rgba(56, 189, 248, 0.3);
+      border-color: #38bdf8;
+    }
+    canvas {
+      touch-action: none;
+      cursor: crosshair;
+    }
+    /* Glow text utilities */
+    .glow-gold {
+      text-shadow: 0 0 16px rgba(250, 204, 21, 0.8), 0 0 30px rgba(234, 179, 8, 0.6);
+    }
+    .glow-cyan {
+      text-shadow: 0 0 14px rgba(56, 189, 248, 0.8);
+    }
+  </style>
+</head>
+<body class="w-screen h-screen flex flex-col justify-between items-center p-2 sm:p-4 select-none">
+
+  <!-- TOP HEADER / HUD -->
+  <header class="w-full max-w-6xl flex flex-wrap justify-between items-center bg-slate-900/80 backdrop-blur-md px-4 py-2 sm:py-3 rounded-2xl border border-slate-700/60 shadow-2xl z-20 gap-2">
+    <!-- Title & Mode -->
+    <div class="flex items-center space-x-3">
+      <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-pink-500 to-amber-400 flex items-center justify-center text-white shadow-lg shadow-pink-500/30">
+        <i class="fa-solid fa-crosshairs text-xl"></i>
+      </div>
+      <div>
+        <h1 class="font-game text-xl sm:text-2xl tracking-wide bg-gradient-to-r from-pink-400 via-yellow-300 to-emerald-400 bg-clip-text text-transparent">
+          SPLATS: TARGET ARCADE
+        </h1>
+        <p class="text-xs text-slate-400 font-semibold uppercase tracking-wider flex items-center gap-1.5">
+          <span class="inline-block w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+          Aim & Click / Tap To Shoot
+        </p>
+      </div>
+    </div>
+
+    <!-- Live Wind Gauge Widget -->
+    <div class="flex items-center bg-slate-800/90 border border-slate-700 rounded-xl px-3 py-1.5 gap-3 shadow-inner">
+      <div class="flex flex-col items-center">
+        <span class="text-[10px] uppercase font-bold text-slate-400 tracking-wider">Wind Vector</span>
+        <div class="flex items-center gap-2 mt-0.5">
+          <i id="wind-icon" class="fa-solid fa-arrow-right text-cyan-400 text-lg transition-transform duration-500"></i>
+          <span id="wind-text" class="font-game text-cyan-300 text-base sm:text-lg">0.0 MPH</span>
+        </div>
+      </div>
+      <!-- Miniature wind direction compass bar -->
+      <div class="w-16 h-2 bg-slate-950 rounded-full overflow-hidden relative border border-slate-700">
+        <div id="wind-bar" class="h-full bg-gradient-to-r from-cyan-400 to-emerald-400 w-1/2 absolute left-1/4 transition-all duration-300"></div>
+      </div>
+    </div>
+
+    <!-- Score & Stats Badges -->
+    <div class="flex items-center gap-2 sm:gap-4">
+      <div class="text-right">
+        <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-widest">Score</span>
+        <span id="score-val" class="font-game text-2xl sm:text-3xl text-amber-400 glow-gold leading-none">0</span>
+      </div>
+      <div class="h-8 w-px bg-slate-700"></div>
+      <div class="text-center">
+        <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Shots</span>
+        <span id="shots-val" class="font-game text-lg sm:text-xl text-slate-200 leading-none">0</span>
+      </div>
+      <div class="h-8 w-px bg-slate-700"></div>
+      <div class="text-left">
+        <span class="text-[10px] uppercase font-bold text-slate-400 block tracking-wider">Accuracy</span>
+        <span id="acc-val" class="font-game text-lg sm:text-xl text-emerald-400 leading-none">0%</span>
+      </div>
+    </div>
+  </header>
+
+  <!-- MAIN CANVAS ARENA -->
+  <main class="relative w-full max-w-6xl flex-1 my-2 rounded-2xl overflow-hidden border-2 border-slate-700/60 shadow-[0_0_50px_rgba(0,0,0,0.6)] bg-slate-950/70 flex items-center justify-center">
+    <canvas id="gameCanvas" class="w-full h-full block"></canvas>
+
+    <!-- Crosshair indicator on desktop hover -->
+    <div id="reticle" class="pointer-events-none absolute w-8 h-8 rounded-full border-2 border-dashed border-cyan-400/80 -translate-x-1/2 -translate-y-1/2 hidden sm:block opacity-0 transition-opacity">
+      <div class="absolute inset-x-0 top-1/2 h-0.5 bg-cyan-400/60 -translate-y-1/2"></div>
+      <div class="absolute inset-y-0 left-1/2 w-0.5 bg-cyan-400/60 -translate-x-1/2"></div>
+    </div>
+
+    <!-- Ambient Floating Rating Banner (Transient Overlay) -->
+    <div id="hit-banner" class="pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 opacity-0 font-game text-4xl sm:text-6xl tracking-wider transition-all duration-300 drop-shadow-[0_8px_16px_rgba(0,0,0,0.8)] scale-75">
+      PERFECT!
+    </div>
+  </main>
+
+  <!-- BOTTOM WEAPON SELECTOR DOCK & SOUND CONTROLS -->
+  <footer class="w-full max-w-6xl flex flex-wrap items-center justify-between gap-3 bg-slate-900/85 backdrop-blur-md px-3 sm:px-6 py-2.5 rounded-2xl border border-slate-700/70 shadow-2xl z-20">
+    
+    <!-- 3 Weapon Choices -->
+    <div class="flex items-center gap-2 sm:gap-3 flex-1 justify-center sm:justify-start">
+      <!-- 1. Rapid Sprayer -->
+      <button id="wpn-1" onclick="selectWeapon(0)" class="weapon-card active flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/90 border-2 border-slate-600 hover:border-pink-400 cursor-pointer text-left">
+        <div class="w-9 h-9 rounded-lg bg-pink-500/20 text-pink-400 flex items-center justify-center text-lg shadow-inner">
+          <i class="fa-solid fa-bolt-lightning"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-game text-xs sm:text-sm text-pink-300">Rapid Sprayer</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-pink-500/20 text-pink-300 font-bold">1</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-tight">Fast auto-rate &bull; High spread &bull; Wind weak</p>
+        </div>
+      </button>
+
+      <!-- 2. Balanced Marker -->
+      <button id="wpn-2" onclick="selectWeapon(1)" class="weapon-card flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/90 border-2 border-slate-600 hover:border-yellow-400 cursor-pointer text-left">
+        <div class="w-9 h-9 rounded-lg bg-yellow-500/20 text-yellow-400 flex items-center justify-center text-lg shadow-inner">
+          <i class="fa-solid fa-sliders"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-game text-xs sm:text-sm text-yellow-300">Balanced Marker</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-yellow-500/20 text-yellow-300 font-bold">2</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-tight">Medium speed &bull; Fair spread &bull; Balanced</p>
+        </div>
+      </button>
+
+      <!-- 3. Precision Sniper -->
+      <button id="wpn-3" onclick="selectWeapon(2)" class="weapon-card flex items-center gap-2.5 px-3 py-2 rounded-xl bg-slate-800/90 border-2 border-slate-600 hover:border-cyan-400 cursor-pointer text-left">
+        <div class="w-9 h-9 rounded-lg bg-cyan-500/20 text-cyan-400 flex items-center justify-center text-lg shadow-inner">
+          <i class="fa-solid fa-bullseye"></i>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5">
+            <span class="font-game text-xs sm:text-sm text-cyan-300">Precision Rifle</span>
+            <span class="text-[9px] px-1.5 py-0.5 rounded bg-cyan-500/20 text-cyan-300 font-bold">3</span>
+          </div>
+          <p class="text-[10px] text-slate-400 leading-tight">Zero spread &bull; Wind immune &bull; Slower reload</p>
+        </div>
+      </button>
+    </div>
+
+    <!-- Actions & Quick Controls -->
+    <div class="flex items-center gap-2">
+      <button id="clear-btn" onclick="clearSplats()" title="Wipe backboard splats" class="px-3 py-2 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 text-xs font-semibold border border-slate-600 flex items-center gap-1.5 transition">
+        <i class="fa-solid fa-broom text-amber-400"></i>
+        <span>Clean Board</span>
+      </button>
+      <button id="mute-btn" onclick="toggleAudio()" title="Sound On/Off" class="w-10 h-10 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 flex items-center justify-center text-sm border border-slate-600 transition">
+        <i id="mute-icon" class="fa-solid fa-volume-high text-emerald-400"></i>
+      </button>
+      <button onclick="resetStats()" title="Reset score" class="w-10 h-10 rounded-xl bg-rose-500/20 hover:bg-rose-500/30 text-rose-300 flex items-center justify-center text-sm border border-rose-500/40 transition">
+        <i class="fa-solid fa-rotate-right"></i>
+      </button>
+    </div>
+  </footer>
+
+  <!-- JAVASCRIPT GAME ENGINE -->
+  <script>
+    // --- AUDIO SYNTHESIZER (Tone / Web Audio API) ---
+    let audioCtx = null;
+    let isMuted = false;
+
+    function initAudio() {
+      if (!audioCtx) {
+        const AudioContextClass = window.AudioContext || window.webkitAudioContext;
+        audioCtx = new AudioContextClass();
+      }
+      if (audioCtx.state === 'suspended') {
+        audioCtx.resume();
+      }
+    }
+
+    function playSound(type) {
+      if (isMuted) return;
+      try {
+        initAudio();
+        const now = audioCtx.currentTime;
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+
+        if (type === 'fire-rapid') {
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(320, now);
+          osc.frequency.exponentialRampToValueAtTime(110, now + 0.08);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.08);
+          osc.start(now);
+          osc.stop(now + 0.08);
+        } else if (type === 'fire-balanced') {
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(260, now);
+          osc.frequency.exponentialRampToValueAtTime(80, now + 0.12);
+          gain.gain.setValueAtTime(0.3, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.12);
+          osc.start(now);
+          osc.stop(now + 0.12);
+        } else if (type === 'fire-sniper') {
+          osc.type = 'sawtooth';
+          osc.frequency.setValueAtTime(440, now);
+          osc.frequency.exponentialRampToValueAtTime(60, now + 0.22);
+          gain.gain.setValueAtTime(0.4, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.22);
+          osc.start(now);
+          osc.stop(now + 0.22);
+        } else if (type === 'hit-bullseye') {
+          // Cheerful chime
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(523.25, now); // C5
+          osc.frequency.setValueAtTime(659.25, now + 0.08); // E5
+          osc.frequency.setValueAtTime(1046.50, now + 0.16); // C6
+          gain.gain.setValueAtTime(0.35, now);
+          gain.gain.exponentialRampToValueAtTime(0.01, now + 0.35);
+          osc.start(now);
+          osc.stop(now + 0.35);
+        } else if (type === 'hit-standard') {
+          // Pop splat sound
+          osc.type = 'triangle';
+          osc.frequency.setValueAtTime(400, now);
+          osc.frequency.exponentialRampToValueAtTime(150, now + 0.15);
+          gain.gain.setValueAtTime(0.35, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.15);
+          osc.start(now);
+          osc.stop(now + 0.15);
+        } else if (type === 'miss') {
+          // Low thud
+          osc.type = 'sine';
+          osc.frequency.setValueAtTime(130, now);
+          osc.frequency.linearRampToValueAtTime(60, now + 0.18);
+          gain.gain.setValueAtTime(0.2, now);
+          gain.gain.linearRampToValueAtTime(0.01, now + 0.18);
+          osc.start(now);
+          osc.stop(now + 0.18);
+        }
+      } catch (e) {
+        // Audio error fallback
+      }
+    }
+
+    function toggleAudio() {
+      isMuted = !isMuted;
+      const icon = document.getElementById('mute-icon');
+      if (isMuted) {
+        icon.className = 'fa-solid fa-volume-xmark text-rose-400';
+      } else {
+        icon.className = 'fa-solid fa-volume-high text-emerald-400';
+        initAudio();
+      }
+    }
+
+    // --- WEAPON CONFIGURATIONS ---
+    const WEAPONS = [
+      {
+        id: 0,
+        name: 'Rapid Sprayer',
+        fireRate: 85, // ms between shots
+        speed: 19,
+        baseSpread: 32, // random projectile deviation
+        windMultiplier: 1.45, // high wind sensitivity
+        pelletRadius: 6,
+        colorList: ['#f43f5e', '#ec4899', '#f97316', '#fb7185'],
+        sfx: 'fire-rapid',
+        recoilStrength: 8
+      },
+      {
+        id: 1,
+        name: 'Balanced Marker',
+        fireRate: 230,
+        speed: 16,
+        baseSpread: 12,
+        windMultiplier: 0.65, // moderate sensitivity
+        pelletRadius: 8,
+        colorList: ['#eab308', '#facc15', '#10b981', '#34d399'],
+        sfx: 'fire-balanced',
+        recoilStrength: 12
+      },
+      {
+        id: 2,
+        name: 'Precision Rifle',
+        fireRate: 580,
+        speed: 13,
+        baseSpread: 0, // pinpoint
+        windMultiplier: 0.0, // unaffected by wind!
+        pelletRadius: 10,
+        colorList: ['#38bdf8', '#06b6d4', '#6366f1', '#a855f7'],
+        sfx: 'fire-sniper',
+        recoilStrength: 18
+      }
+    ];
+
+    let currentWeaponIdx = 0;
+    let lastShotTime = 0;
+
+    // --- GAME ENGINE STATE ---
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const hitBanner = document.getElementById('hit-banner');
+    const reticle = document.getElementById('reticle');
+
+    let canvasWidth = 800;
+    let canvasHeight = 500;
+
+    // Wind Dynamics
+    let currentWind = 0; // -10.0 to +10.0 (pixels/sec force)
+    let targetWind = 3.5;
+    let windChangeTimer = 0;
+
+    // Stats
+    let score = 0;
+    let totalShots = 0;
+    let totalHits = 0;
+
+    // Paintballs, splats, particles, banners
+    const paintballs = [];
+    const permanentSplats = []; // Splats on moving target or backboard
+    const particles = [];
+    const floatingScores = [];
+
+    // Aim & Shooting Control
+    let mousePos = { x: 400, y: 250 };
+    let isMouseDown = false;
+
+    // Gun Turret Position (Bottom Left stationary shooter)
+    const shooter = {
+      x: 80,
+      y: 400,
+      angle: 0,
+      barrelLength: 52,
+      recoilOffset: 0
+    };
+
+    // Moving Dartboard Target Definition
+    const target = {
+      x: 700,
+      y: 250,
+      baseRadius: 65, // Concentric ring radius
+      vy: 1.8,
+      vx: 0,
+      minY: 100,
+      maxY: 420,
+      phase: 0,
+      wobbleSpeed: 0.03,
+      // Dartboard ring bands (r: radius, pts: score, label: text, color: fill)
+      rings: [
+        { rRatio: 0.22, points: 100, label: 'PERFECT!', ringColor: '#ef4444', ringBorder: '#fee2e2' }, // Bullseye
+        { rRatio: 0.46, points: 50,  label: 'GREAT!',   ringColor: '#3b82f6', ringBorder: '#dbeafe' }, // Inner
+        { rRatio: 0.74, points: 25,  label: 'GOOD',     ringColor: '#10b981', ringBorder: '#d1fae5' }, // Middle
+        { rRatio: 1.00, points: 10,  label: 'OK',       ringColor: '#f59e0b', ringBorder: '#fef3c7' }  // Outer
+      ]
+    };
+
+    // --- CANVAS SIZING & RESPONSIVENESS ---
+    function resizeCanvas() {
+      const parent = canvas.parentElement;
+      const rect = parent.getBoundingClientRect();
+      canvas.width = rect.width;
+      canvas.height = rect.height;
+      canvasWidth = rect.width;
+      canvasHeight = rect.height;
+
+      // Adjust shooter position relative to screen size
+      shooter.x = Math.max(60, canvasWidth * 0.1);
+      shooter.y = Math.min(canvasHeight - 50, canvasHeight * 0.85);
+
+      // Target bounds
+      target.x = Math.min(canvasWidth - 110, canvasWidth * 0.85);
+      target.minY = 90;
+      target.maxY = canvasHeight - 90;
+      target.baseRadius = Math.max(45, Math.min(75, canvasWidth * 0.075));
+    }
+
+    window.addEventListener('resize', resizeCanvas);
+
+    // --- WEAPON SELECTION ---
+    function selectWeapon(idx) {
+      currentWeaponIdx = idx;
+      document.querySelectorAll('.weapon-card').forEach((card, i) => {
+        if (i === idx) {
+          card.classList.add('active');
+        } else {
+          card.classList.remove('active');
+        }
+      });
+      initAudio();
+    }
+
+    window.addEventListener('keydown', (e) => {
+      if (e.key === '1') selectWeapon(0);
+      if (e.key === '2') selectWeapon(1);
+      if (e.key === '3') selectWeapon(2);
+      if (e.key === 'c' || e.key === 'C') clearSplats();
+      if (e.key === 'm' || e.key === 'M') toggleAudio();
+    });
+
+    // --- INPUT LISTENERS (MOUSE & TOUCH) ---
+    function getPointerPos(e) {
+      const rect = canvas.getBoundingClientRect();
+      const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+      const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+      return {
+        x: clientX - rect.left,
+        y: clientY - rect.top
+      };
+    }
+
+    canvas.addEventListener('mousemove', (e) => {
+      mousePos = getPointerPos(e);
+      reticle.style.left = `${e.clientX}px`;
+      reticle.style.top = `${e.clientY}px`;
+      reticle.style.opacity = '1';
+    });
+
+    canvas.addEventListener('mouseenter', () => {
+      reticle.style.opacity = '1';
+    });
+
+    canvas.addEventListener('mouseleave', () => {
+      reticle.style.opacity = '0';
+      isMouseDown = false;
+    });
+
+    canvas.addEventListener('mousedown', (e) => {
+      mousePos = getPointerPos(e);
+      isMouseDown = true;
+      initAudio();
+      tryFire();
+    });
+
+    window.addEventListener('mouseup', () => {
+      isMouseDown = false;
+    });
+
+    // Touch support for mobile/tablets
+    canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault();
+      mousePos = getPointerPos(e);
+      isMouseDown = true;
+      initAudio();
+      tryFire();
+    }, { passive: false });
+
+    canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault();
+      mousePos = getPointerPos(e);
+    }, { passive: false });
+
+    canvas.addEventListener('touchend', (e) => {
+      e.preventDefault();
+      isMouseDown = false;
+    }, { passive: false });
+
+    // --- SHOOTING MECHANISM ---
+    function tryFire() {
+      const now = performance.now();
+      const currentWpn = WEAPONS[currentWeaponIdx];
+
+      if (now - lastShotTime < currentWpn.fireRate) {
+        return;
+      }
+      lastShotTime = now;
+
+      // Calculate base direction from shooter muzzle to reticle
+      const dx = mousePos.x - shooter.x;
+      const dy = mousePos.y - shooter.y;
+      const baseAngle = Math.atan2(dy, dx);
+
+      // Weapon random spread (deviates launch angle)
+      let spreadAngle = 0;
+      if (currentWpn.baseSpread > 0) {
+        const spreadRad = (currentWpn.baseSpread * Math.PI) / 180 / 8;
+        spreadAngle = (Math.random() - 0.5) * spreadRad;
+      }
+
+      const launchAngle = baseAngle + spreadAngle;
+      const speed = currentWpn.speed;
+
+      // Color pick
+      const col = currentWpn.colorList[Math.floor(Math.random() * currentWpn.colorList.length)];
+
+      // Initial paintball spawn position at tip of barrel
+      const startX = shooter.x + Math.cos(launchAngle) * shooter.barrelLength;
+      const startY = shooter.y + Math.sin(launchAngle) * shooter.barrelLength;
+
+      paintballs.push({
+        x: startX,
+        y: startY,
+        vx: Math.cos(launchAngle) * speed,
+        vy: Math.sin(launchAngle) * speed,
+        radius: currentWpn.pelletRadius,
+        color: col,
+        windSens: currentWpn.windMultiplier,
+        life: 0,
+        trail: []
+      });
+
+      // Recoil
+      shooter.recoilOffset = currentWpn.recoilStrength;
+
+      // Muzzle flash particle burst
+      for (let i = 0; i < 6; i++) {
+        particles.push({
+          x: startX,
+          y: startY,
+          vx: Math.cos(launchAngle + (Math.random() - 0.5)) * (Math.random() * 4 + 2),
+          vy: Math.sin(launchAngle + (Math.random() - 0.5)) * (Math.random() * 4 + 2),
+          radius: Math.random() * 3 + 1,
+          color: col,
+          alpha: 1,
+          decay: 0.08
+        });
+      }
+
+      totalShots++;
+      updateStatsUI();
+      playSound(currentWpn.sfx);
+    }
+
+    // --- WIND SYSTEM ---
+    function updateWind(dt) {
+      windChangeTimer += dt;
+      // Change target wind every 3.5 to 6 seconds
+      if (windChangeTimer > 4.5) {
+        windChangeTimer = 0;
+        // Wind between -8.5 (left gust) and +8.5 (right gust)
+        targetWind = (Math.random() * 17) - 8.5;
+      }
+
+      // Smoothly interpolate wind toward target
+      currentWind += (targetWind - currentWind) * 0.02;
+
+      // Update Top HUD
+      const absWind = Math.abs(currentWind);
+      const windText = document.getElementById('wind-text');
+      const windIcon = document.getElementById('wind-icon');
+      const windBar = document.getElementById('wind-bar');
+
+      windText.innerText = `${absWind.toFixed(1)} MPH`;
+
+      if (currentWind >= 0.5) {
+        windIcon.style.transform = 'rotate(0deg)';
+        windIcon.className = 'fa-solid fa-arrow-right text-cyan-400 text-lg transition-transform duration-500';
+      } else if (currentWind <= -0.5) {
+        windIcon.style.transform = 'rotate(180deg)';
+        windIcon.className = 'fa-solid fa-arrow-right text-rose-400 text-lg transition-transform duration-500';
+      } else {
+        windIcon.style.transform = 'rotate(90deg)';
+        windIcon.className = 'fa-solid fa-minus text-slate-400 text-lg transition-transform duration-500';
+      }
+
+      // Compass visual slider: center is 50%
+      const barPercent = Math.min(100, Math.max(0, 50 + (currentWind / 9) * 45));
+      windBar.style.left = `${Math.min(50, barPercent)}%`;
+      windBar.style.width = `${Math.abs(barPercent - 50)}%`;
+    }
+
+    // --- SPLAT GENERATION HELPER ---
+    function createSplatShapes(x, y, color, baseR, attachToTarget = false, localX = 0, localY = 0) {
+      const droplets = [];
+      const numDroplets = 8 + Math.floor(Math.random() * 8);
+
+      for (let i = 0; i < numDroplets; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = Math.random() * (baseR * 1.5) + (baseR * 0.4);
+        droplets.push({
+          relX: Math.cos(angle) * dist,
+          relY: Math.sin(angle) * dist,
+          radius: Math.random() * (baseR * 0.35) + 2
+        });
+      }
+
+      permanentSplats.push({
+        x: x,
+        y: y,
+        color: color,
+        radius: baseR,
+        droplets: droplets,
+        attachToTarget: attachToTarget,
+        localX: localX,
+        localY: localY,
+        alpha: 0.95
+      });
+
+      // Cap maximum splats on screen to maintain top performance
+      if (permanentSplats.length > 180) {
+        permanentSplats.shift();
+      }
+    }
+
+    // --- TRIGGER POPUP BANNER & FLOATING TEXT ---
+    function showHitFeedback(label, points, x, y) {
+      // Floating numbers on canvas
+      floatingScores.push({
+        text: label,
+        points: points > 0 ? `+${points}` : '0',
+        x: x,
+        y: y,
+        vy: -1.6,
+        alpha: 1,
+        color: points === 100 ? '#facc15' : points === 50 ? '#38bdf8' : points === 25 ? '#34d399' : points === 10 ? '#fbbf24' : '#94a3b8'
+      });
+
+      // Main big banner flash
+      hitBanner.innerText = label;
+      hitBanner.className = 'pointer-events-none absolute top-1/4 left-1/2 -translate-x-1/2 -translate-y-1/2 font-game text-4xl sm:text-6xl tracking-wider transition-all duration-300 drop-shadow-[0_8px_16px_rgba(0,0,0,0.8)] scale-110 opacity-100';
+
+      if (points === 100) {
+        hitBanner.style.color = '#fde047';
+        hitBanner.style.textShadow = '0 0 25px rgba(250, 204, 21, 0.9), 0 0 50px rgba(234, 179, 8, 0.7)';
+      } else if (points === 50) {
+        hitBanner.style.color = '#38bdf8';
+        hitBanner.style.textShadow = '0 0 20px rgba(56, 189, 248, 0.8)';
+      } else if (points === 25) {
+        hitBanner.style.color = '#34d399';
+        hitBanner.style.textShadow = '0 0 16px rgba(52, 211, 153, 0.8)';
+      } else if (points === 10) {
+        hitBanner.style.color = '#fbbf24';
+        hitBanner.style.textShadow = '0 0 14px rgba(251, 191, 36, 0.7)';
+      } else {
+        hitBanner.style.color = '#cbd5e1';
+        hitBanner.style.textShadow = 'none';
+      }
+
+      setTimeout(() => {
+        hitBanner.style.opacity = '0';
+        hitBanner.style.transform = 'translate(-50%, -70%) scale(0.85)';
+      }, 450);
+    }
+
+    // --- GAME LOOP & UPDATES ---
+    function updateGame() {
+      // Wind update
+      updateWind(0.016);
+
+      // Auto fire when holding click/tap down
+      if (isMouseDown) {
+        tryFire();
+      }
+
+      // Smooth gun angle tracking toward mouse
+      const aimDx = mousePos.x - shooter.x;
+      const aimDy = mousePos.y - shooter.y;
+      shooter.angle = Math.atan2(aimDy, aimDx);
+
+      // Smooth recoil recovery
+      if (shooter.recoilOffset > 0) {
+        shooter.recoilOffset *= 0.82;
+      }
+
+      // Target Movement: Smooth harmonic oscillation with dynamic vertical bounce
+      target.phase += target.wobbleSpeed;
+      target.y += target.vy;
+      target.x += Math.sin(target.phase) * 0.7; // slight horizontal weave
+
+      if (target.y < target.minY) {
+        target.y = target.minY;
+        target.vy = Math.abs(target.vy);
+      } else if (target.y > target.maxY) {
+        target.y = target.maxY;
+        target.vy = -Math.abs(target.vy);
+      }
+
+      // Update Paintballs
+      for (let i = paintballs.length - 1; i >= 0; i--) {
+        const pb = paintballs[i];
+
+        // Store trail
+        pb.trail.push({ x: pb.x, y: pb.y });
+        if (pb.trail.length > 5) pb.trail.shift();
+
+        // Wind pushes projectile horizontally: affected by weapon's windMultiplier
+        // (For Precision Rifle, windSens is 0.0 -> unaffected!)
+        pb.vx += (currentWind * 0.02) * pb.windSens;
+
+        // Apply projectile position
+        pb.x += pb.vx;
+        pb.y += pb.vy;
+        pb.life++;
+
+        // Collision Check with Moving Target
+        const distToCenter = Math.hypot(pb.x - target.x, pb.y - target.y);
+
+        if (distToCenter <= target.baseRadius) {
+          // HIT TARGET! Calculate concentric ring
+          totalHits++;
+          let hitAwarded = false;
+
+          for (let rIndex = 0; rIndex < target.rings.length; rIndex++) {
+            const ring = target.rings[rIndex];
+            const ringLimitRadius = target.baseRadius * ring.rRatio;
+
+            if (distToCenter <= ringLimitRadius) {
+              score += ring.points;
+              showHitFeedback(ring.label, ring.points, pb.x, pb.y);
+
+              if (ring.points === 100) {
+                playSound('hit-bullseye');
+              } else {
+                playSound('hit-standard');
+              }
+
+              hitAwarded = true;
+              break;
+            }
+          }
+
+          if (!hitAwarded) {
+            // Edge hit
+            score += 10;
+            showHitFeedback('OK', 10, pb.x, pb.y);
+            playSound('hit-standard');
+          }
+
+          // Attach splat to the moving target
+          const localX = pb.x - target.x;
+          const localY = pb.y - target.y;
+          createSplatShapes(pb.x, pb.y, pb.color, pb.radius * 2.2, true, localX, localY);
+
+          // Impact sparks
+          spawnImpactSparks(pb.x, pb.y, pb.color, 14);
+
+          updateStatsUI();
+          paintballs.splice(i, 1);
+          continue;
+        }
+
+        // Missed target: hit the arena back wall / bounds
+        if (pb.x > canvasWidth - 15) {
+          // Splat on backboard wall
+          createSplatShapes(canvasWidth - 10, pb.y, pb.color, pb.radius * 1.8, false);
+          spawnImpactSparks(canvasWidth - 10, pb.y, pb.color, 8);
+          showHitFeedback('MISS', 0, pb.x, pb.y);
+          playSound('miss');
+          updateStatsUI();
+          paintballs.splice(i, 1);
+          continue;
+        }
+
+        // Out of vertical canvas bounds
+        if (pb.y < -20 || pb.y > canvasHeight + 20 || pb.x < -20) {
+          paintballs.splice(i, 1);
+          continue;
+        }
+      }
+
+      // Update Particles
+      for (let i = particles.length - 1; i >= 0; i--) {
+        const p = particles[i];
+        p.x += p.vx;
+        p.y += p.vy;
+        p.alpha -= p.decay;
+        if (p.alpha <= 0) {
+          particles.splice(i, 1);
+        }
+      }
+
+      // Update Floating Texts
+      for (let i = floatingScores.length - 1; i >= 0; i--) {
+        const ft = floatingScores[i];
+        ft.y += ft.vy;
+        ft.alpha -= 0.024;
+        if (ft.alpha <= 0) {
+          floatingScores.splice(i, 1);
+        }
+      }
+    }
+
+    function spawnImpactSparks(x, y, color, count) {
+      for (let i = 0; i < count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const spd = Math.random() * 5 + 1.5;
+        particles.push({
+          x: x,
+          y: y,
+          vx: Math.cos(angle) * spd,
+          vy: Math.sin(angle) * spd,
+          radius: Math.random() * 2.5 + 1,
+          color: color,
+          alpha: 1,
+          decay: 0.035
+        });
+      }
+    }
+
+    function updateStatsUI() {
+      document.getElementById('score-val').innerText = score;
+      document.getElementById('shots-val').innerText = totalShots;
+      const acc = totalShots > 0 ? Math.round((totalHits / totalShots) * 100) : 0;
+      document.getElementById('acc-val').innerText = `${acc}%`;
+    }
+
+    function clearSplats() {
+      permanentSplats.length = 0;
+      initAudio();
+      playSound('miss');
+    }
+
+    function resetStats() {
+      score = 0;
+      totalShots = 0;
+      totalHits = 0;
+      updateStatsUI();
+      initAudio();
+    }
+
+    // --- RENDERING PIPELINE ---
+    function draw() {
+      ctx.clearRect(0, 0, canvasWidth, canvasHeight);
+
+      // 1. Grid Background
+      drawArenaGrid();
+
+      // 2. Fixed Backboard Splats (Splats that missed target and stuck to back wall)
+      drawSplats(false);
+
+      // 3. Moving Target Post & Concentric Board
+      drawMovingTarget();
+
+      // 4. Splats Attached to Target (moves with target)
+      drawSplats(true);
+
+      // 5. Paintball Projectiles & Trails
+      drawPaintballs();
+
+      // 6. Impact Particles & Fireworks
+      drawParticles();
+
+      // 7. Stationary Paintball Marker / Shooter
+      drawShooter();
+
+      // 8. Floating hit numbers
+      drawFloatingScores();
+    }
+
+    function drawArenaGrid() {
+      ctx.save();
+      ctx.strokeStyle = 'rgba(51, 65, 85, 0.25)';
+      ctx.lineWidth = 1;
+      const step = 40;
+
+      for (let x = 0; x < canvasWidth; x += step) {
+        ctx.beginPath();
+        ctx.moveTo(x, 0);
+        ctx.lineTo(x, canvasHeight);
+        ctx.stroke();
+      }
+      for (let y = 0; y < canvasHeight; y += step) {
+        ctx.beginPath();
+        ctx.moveTo(0, y);
+        ctx.lineTo(canvasWidth, y);
+        ctx.stroke();
+      }
+
+      // Backboard catch wall on right side
+      ctx.fillStyle = 'rgba(30, 41, 59, 0.7)';
+      ctx.fillRect(canvasWidth - 16, 0, 16, canvasHeight);
+      ctx.strokeStyle = '#475569';
+      ctx.strokeRect(canvasWidth - 16, 0, 16, canvasHeight);
+      ctx.restore();
+    }
+
+    function drawMovingTarget() {
+      ctx.save();
+
+      // Target support cable / guide rail
+      ctx.strokeStyle = '#334155';
+      ctx.lineWidth = 4;
+      ctx.beginPath();
+      ctx.moveTo(target.x, 0);
+      ctx.lineTo(target.x, canvasHeight);
+      ctx.stroke();
+
+      // Target suspension arm
+      ctx.fillStyle = '#64748b';
+      ctx.fillRect(target.x - 5, target.y - target.baseRadius - 16, 10, 16);
+
+      // Shadow behind the board
+      ctx.shadowColor = 'rgba(0, 0, 0, 0.5)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetX = 4;
+      ctx.shadowOffsetY = 6;
+
+      // Draw Concentric Rings (From Outer to Inner)
+      for (let i = target.rings.length - 1; i >= 0; i--) {
+        const ring = target.rings[i];
+        const r = target.baseRadius * ring.rRatio;
+
+        ctx.beginPath();
+        ctx.arc(target.x, target.y, r, 0, Math.PI * 2);
+        ctx.fillStyle = ring.ringColor;
+        ctx.fill();
+
+        ctx.lineWidth = 2.5;
+        ctx.strokeStyle = ring.ringBorder;
+        ctx.stroke();
+
+        // Subtle ring point marker label
+        if (i > 0 && r > 20) {
+          ctx.save();
+          ctx.fillStyle = 'rgba(255,255,255,0.7)';
+          ctx.font = 'bold 9px sans-serif';
+          ctx.textAlign = 'center';
+          ctx.fillText(ring.points, target.x, target.y - r + 11);
+          ctx.restore();
+        }
+      }
+
+      // Outer bezel ring
+      ctx.shadowBlur = 0;
+      ctx.lineWidth = 5;
+      ctx.strokeStyle = '#0f172a';
+      ctx.beginPath();
+      ctx.arc(target.x, target.y, target.baseRadius, 0, Math.PI * 2);
+      ctx.stroke();
+
+      ctx.restore();
+    }
+
+    function drawSplats(onlyAttached) {
+      ctx.save();
+      for (let i = 0; i < permanentSplats.length; i++) {
+        const s = permanentSplats[i];
+        if (s.attachToTarget !== onlyAttached) continue;
+
+        const renderX = s.attachToTarget ? target.x + s.localX : s.x;
+        const renderY = s.attachToTarget ? target.y + s.localY : s.y;
+
+        ctx.fillStyle = s.color;
+        ctx.globalAlpha = s.alpha;
+
+        // Central blotch
+        ctx.beginPath();
+        ctx.arc(renderX, renderY, s.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Surrounding splatter dots
+        for (let j = 0; j < s.droplets.length; j++) {
+          const d = s.droplets[j];
+          ctx.beginPath();
+          ctx.arc(renderX + d.relX, renderY + d.relY, d.radius, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      }
+      ctx.restore();
+    }
+
+    function drawPaintballs() {
+      ctx.save();
+      for (let i = 0; i < paintballs.length; i++) {
+        const pb = paintballs[i];
+
+        // Motion trail
+        ctx.lineWidth = pb.radius * 1.2;
+        ctx.strokeStyle = pb.color;
+        ctx.lineCap = 'round';
+        ctx.beginPath();
+        for (let t = 0; t < pb.trail.length; t++) {
+          const pt = pb.trail[t];
+          ctx.globalAlpha = (t + 1) / (pb.trail.length + 1) * 0.45;
+          if (t === 0) ctx.moveTo(pt.x, pt.y);
+          else ctx.lineTo(pt.x, pt.y);
+        }
+        ctx.stroke();
+
+        // Main paintball orb
+        ctx.globalAlpha = 1;
+        ctx.shadowColor = pb.color;
+        ctx.shadowBlur = 10;
+        ctx.fillStyle = pb.color;
+        ctx.beginPath();
+        ctx.arc(pb.x, pb.y, pb.radius, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Gloss highlight
+        ctx.shadowBlur = 0;
+        ctx.fillStyle = 'rgba(255, 255, 255, 0.7)';
+        ctx.beginPath();
+        ctx.arc(pb.x - pb.radius * 0.3, pb.y - pb.radius * 0.3, pb.radius * 0.35, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawShooter() {
+      ctx.save();
+      ctx.translate(shooter.x, shooter.y);
+
+      // Base mount platform
+      ctx.fillStyle = '#1e293b';
+      ctx.strokeStyle = '#38bdf8';
+      ctx.lineWidth = 2;
+      ctx.beginPath();
+      ctx.arc(0, 0, 26, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.stroke();
+
+      // Gun Barrel (rotates with aim)
+      ctx.rotate(shooter.angle);
+
+      // Gun stock / hopper
+      ctx.fillStyle = '#0f172a';
+      ctx.fillRect(-18, -12, 16, 24);
+
+      // Paintball hopper tank on top
+      ctx.fillStyle = WEAPONS[currentWeaponIdx].colorList[0];
+      ctx.beginPath();
+      ctx.ellipse(-6, -18, 14, 8, 0, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.strokeStyle = '#fff';
+      ctx.lineWidth = 1;
+      ctx.stroke();
+
+      // Barrel with recoil kickback
+      const actualBarrelLen = shooter.barrelLength - shooter.recoilOffset;
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(0, -6, actualBarrelLen, 12);
+
+      // Barrel tip nozzle
+      ctx.fillStyle = '#38bdf8';
+      ctx.fillRect(actualBarrelLen - 5, -8, 7, 16);
+
+      ctx.restore();
+    }
+
+    function drawParticles() {
+      ctx.save();
+      for (let i = 0; i < particles.length; i++) {
+        const p = particles[i];
+        ctx.globalAlpha = p.alpha;
+        ctx.fillStyle = p.color;
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
+
+    function drawFloatingScores() {
+      ctx.save();
+      ctx.font = '900 18px "Fredoka One", cursive';
+      ctx.textAlign = 'center';
+
+      for (let i = 0; i < floatingScores.length; i++) {
+        const fs = floatingScores[i];
+        ctx.globalAlpha = Math.max(0, fs.alpha);
+        ctx.fillStyle = fs.color;
+        ctx.shadowColor = 'rgba(0,0,0,0.8)';
+        ctx.shadowBlur = 6;
+        ctx.fillText(`${fs.text} ${fs.points}`, fs.x, fs.y);
+      }
+      ctx.restore();
+    }
+
+    // --- MAIN ANIMATION LOOP ---
+    function loop() {
+      updateGame();
+      draw();
+      requestAnimationFrame(loop);
+    }
+
+    // Startup
+    window.onload = function() {
+      resizeCanvas();
+      selectWeapon(0);
+      loop();
+    };
+  </script>
+</body>
+</html>
